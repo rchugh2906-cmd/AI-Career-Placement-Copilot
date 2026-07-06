@@ -1,0 +1,6 @@
+{
+  "name": "AI Career & Placement Copilot",
+  "description": "An interactive full-stack AI platform to analyze resumes, identify skill gaps, generate career paths and roadmaps, recommend matching jobs, generate interview questions, and conduct mock or voice interviews.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

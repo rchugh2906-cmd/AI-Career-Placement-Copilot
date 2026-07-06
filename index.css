@@ -1,0 +1,356 @@
+import React, { useState } from "react";
+import { Upload, FileText, ArrowRight, CheckCircle2, AlertTriangle, HelpCircle, Shield, Award, Sparkles } from "lucide-react";
+import { ResumeAnalysisResponse } from "../types";
+import ActionsConcluder from "./ActionsConcluder";
+
+export default function ResumeAnalyzer() {
+  const [targetRole, setTargetRole] = useState("");
+  const [resumeText, setResumeText] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ResumeAnalysisResponse | null>(null);
+
+  // Read file as base64
+  const getBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        resolve(base64.split(",")[1]); // Return clean base64 payload
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile.type === "application/pdf" || droppedFile.type === "text/plain") {
+        setFile(droppedFile);
+        setError(null);
+      } else {
+        setError("Please upload only PDF or TXT files.");
+      }
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+      setError(null);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resumeText.trim() && !file) {
+      setError("Please provide either your resume text or upload a resume file.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      let body: any = { targetRole };
+
+      if (file) {
+        const base64 = await getBase64(file);
+        body.pdfBase64 = base64;
+        body.mimeType = file.type || "application/pdf";
+      } else {
+        body.text = resumeText;
+      }
+
+      const res = await fetch("/api/analyze-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to analyze resume.");
+      }
+
+      const data: ResumeAnalysisResponse = await res.json();
+      setResult(data);
+    } catch (err: any) {
+      setError(err.message || "Something went wrong. Please check your API key config.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const scoreColor = (score: number) => {
+    if (score >= 80) return "text-emerald-600 bg-emerald-50 border-emerald-100";
+    if (score >= 60) return "text-amber-600 bg-amber-50 border-amber-100";
+    return "text-rose-600 bg-rose-50 border-rose-100";
+  };
+
+  return (
+    <div className="space-y-8 animate-fade-in">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+        <div>
+          <h2 className="text-2xl font-bold font-display text-slate-800">Resume PDF Analysis</h2>
+          <p className="text-slate-500 text-sm mt-1">Get an objective, ATS-focused assessment of your CV backed by expert recruiter insights.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Input Form Column */}
+        <form onSubmit={handleSubmit} className="lg:col-span-5 bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-6">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Target Role</label>
+            <input
+              type="text"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all text-sm placeholder:text-slate-400"
+              placeholder="e.g. Frontend Engineer, Product Manager"
+              value={targetRole}
+              onChange={(e) => setTargetRole(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Upload Resume (PDF / TXT)</label>
+            <div
+              className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+                isDragOver ? "border-indigo-500 bg-indigo-50/50" : file ? "border-emerald-500 bg-emerald-50/10" : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById("file-upload")?.click()}
+            >
+              <input
+                id="file-upload"
+                type="file"
+                className="hidden"
+                accept=".pdf,.txt"
+                onChange={handleFileChange}
+              />
+              {file ? (
+                <div className="space-y-2">
+                  <div className="mx-auto w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700 truncate max-w-xs mx-auto">{file.name}</p>
+                  <p className="text-xs text-slate-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFile(null);
+                    }}
+                    className="text-xs text-rose-500 hover:underline cursor-pointer"
+                  >
+                    Remove file
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="mx-auto w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-700">Drag & drop your resume or <span className="text-indigo-600 font-semibold hover:underline">browse</span></p>
+                  <p className="text-xs text-slate-400">Supports PDF or plain TXT up to 10MB</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {!file && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-semibold text-slate-700">Or Paste Resume Text</label>
+                <span className="text-xs text-slate-400 font-mono">Alternative method</span>
+              </div>
+              <textarea
+                className="w-full h-44 px-4 py-3 rounded-xl border border-slate-200 focus:outline-hidden focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all text-sm font-sans placeholder:text-slate-400 resize-none"
+                placeholder="Copy and paste your plain resume text here..."
+                value={resumeText}
+                onChange={(e) => setResumeText(e.target.value)}
+              />
+            </div>
+          )}
+
+          {error && (
+            <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-start gap-2.5 text-xs text-rose-600 leading-relaxed">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-3 px-4 rounded-xl font-medium text-white flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              loading ? "bg-slate-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] shadow-md shadow-indigo-100"
+            }`}
+          >
+            {loading ? (
+              <>
+                <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Analyzing Profile...
+              </>
+            ) : (
+              <>
+                Analyze Resume
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Results Column */}
+        <div className="lg:col-span-7">
+          {result ? (
+            <div className="space-y-6">
+              {/* Score card & Recruiter quote */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-5">
+                <div className={`sm:col-span-4 border rounded-2xl p-6 flex flex-col items-center justify-center text-center ${scoreColor(result.resumeScore)}`}>
+                  <span className="text-xs uppercase tracking-wider font-bold mb-1 opacity-75">Resume Score</span>
+                  <div className="flex items-baseline font-display font-extrabold text-5xl sm:text-6xl">
+                    {result.resumeScore}
+                    <span className="text-xl font-normal text-slate-400">/100</span>
+                  </div>
+                  <div className="mt-3 flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-white/80 border border-slate-100">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                    AI Scored
+                  </div>
+                </div>
+
+                <div className="sm:col-span-8 bg-white border border-slate-100 rounded-2xl p-6 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2 text-indigo-600 font-semibold text-sm">
+                      <Shield className="w-4 h-4" />
+                      ATS Compatibility Evaluation
+                    </div>
+                    <p className="text-slate-600 text-sm leading-relaxed italic">
+                      "{result.atsCompatibility}"
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recruiter Feedback Box */}
+              <div className="bg-linear-to-r from-slate-900 to-slate-800 text-white rounded-2xl p-6 shadow-xs relative overflow-hidden">
+                <div className="absolute right-2 -bottom-2 opacity-5">
+                  <Award className="w-32 h-32" />
+                </div>
+                <div className="relative z-10">
+                  <h3 className="text-md font-bold font-display text-emerald-400 mb-2 flex items-center gap-2">
+                    <Award className="w-5 h-5" />
+                    Recruiter Feedback
+                  </h3>
+                  <p className="text-slate-300 text-sm md:text-base leading-relaxed whitespace-pre-line">
+                    {result.recruiterFeedback}
+                  </p>
+                </div>
+              </div>
+
+              {/* Strengths & Weaknesses Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white border border-slate-100 rounded-2xl p-5">
+                  <h3 className="text-sm font-bold text-emerald-700 flex items-center gap-2 mb-4 border-b border-emerald-50 pb-2.5">
+                    <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
+                    Strengths
+                  </h3>
+                  <ul className="space-y-3">
+                    {result.strengths.map((str, i) => (
+                      <li key={i} className="text-slate-600 text-xs md:text-sm flex gap-2 items-start leading-relaxed">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 mt-1.5" />
+                        <span>{str}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="bg-white border border-slate-100 rounded-2xl p-5">
+                  <h3 className="text-sm font-bold text-rose-700 flex items-center gap-2 mb-4 border-b border-rose-50 pb-2.5">
+                    <AlertTriangle className="w-4.5 h-4.5 text-rose-500 shrink-0" />
+                    Weaknesses
+                  </h3>
+                  <ul className="space-y-3">
+                    {result.weaknesses.map((weak, i) => (
+                      <li key={i} className="text-slate-600 text-xs md:text-sm flex gap-2 items-start leading-relaxed">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0 mt-1.5" />
+                        <span>{weak}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Missing Skills & Improvement Suggestions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white border border-slate-100 rounded-2xl p-5">
+                  <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-4 border-b border-slate-100 pb-2.5">
+                    <HelpCircle className="w-4.5 h-4.5 text-indigo-500 shrink-0" />
+                    Missing Skills
+                  </h3>
+                  {result.missingSkills.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {result.missingSkills.map((sk, i) => (
+                        <span key={i} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100/50 px-2.5 py-1 rounded-lg font-medium">
+                          {sk}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">No significant skills identified as missing.</p>
+                  )}
+                </div>
+
+                <div className="bg-white border border-slate-100 rounded-2xl p-5">
+                  <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-4 border-b border-slate-100 pb-2.5">
+                    <Sparkles className="w-4.5 h-4.5 text-indigo-500 shrink-0" />
+                    Improvement Suggestions
+                  </h3>
+                  <ul className="space-y-2">
+                    {result.improvementSuggestions.map((sug, i) => (
+                      <li key={i} className="text-slate-600 text-xs md:text-sm flex gap-2 items-start leading-relaxed">
+                        <span className="text-indigo-500 font-semibold shrink-0 select-none">•</span>
+                        <span>{sug}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Concluding actions */}
+              <ActionsConcluder actions={result.top3Actions} />
+            </div>
+          ) : (
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl h-96 flex flex-col items-center justify-center text-center p-6 text-slate-400">
+              <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 flex items-center justify-center mb-4 text-slate-300">
+                <FileText className="w-8 h-8" />
+              </div>
+              <h3 className="font-semibold text-slate-700 mb-1">No Active Analysis</h3>
+              <p className="text-xs max-w-sm">Provide your target role and upload/paste your resume on the left to run an assessment.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
